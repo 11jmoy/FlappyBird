@@ -3,262 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neon Flap</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Retro Flap Game</title>
     <style>
         body {
-            background-color: #000000;
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            touch-action: none;
-            overflow: hidden;
             margin: 0;
+            padding: 0;
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            background: url('background.webp') center bottom repeat-x;
+            background-size: cover;
         }
+
+        @font-face {
+            font-family: 'FlappyFont';
+            src: url('flappy_font.ttf') format('truetype');
+        }
+
         canvas {
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.3);
-            border: 2px solid #00f3ff;
-            background: #000000;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
         }
     </style>
 </head>
-<body class="bg-black flex flex-col items-center justify-center h-screen select-none">
-
-    <div class="relative w-[360px] h-[640px] max-w-full max-h-screen">
-        <canvas id="gameCanvas" width="360" height="640" class="w-full h-full rounded-lg"></canvas>
-
-        <!-- Start Screen Overlay -->
-        <div id="startScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-10">
-            <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 drop-shadow-[0_0_15px_rgba(0,243,255,0.8)] tracking-wider">NEON FLAP</h1>
-            <p class="text-sm text-gray-400 mb-8">Tap or Click to Flap & Avoid Pillars</p>
-            <button id="startBtn" class="px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] transition-all transform hover:scale-105 active:scale-95">
-                START GAME
-            </button>
-        </div>
-
-        <!-- Game Over Screen Overlay -->
-        <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm z-10 hidden">
-            <h2 class="text-4xl font-black text-red-500 mb-2 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]">GAME OVER</h2>
-            <div class="bg-zinc-900/80 border border-cyan-500/30 p-6 rounded-2xl mb-6 text-center w-64 shadow-xl">
-                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Score</p>
-                <p id="finalScore" class="text-4xl font-bold text-white mb-4">0</p>
-                <div class="border-t border-zinc-800 pt-3 flex justify-between px-4">
-                    <span class="text-gray-400 text-sm">Best</span>
-                    <span id="bestScore" class="text-cyan-400 font-bold text-sm">0</span>
-                </div>
-            </div>
-            <button id="restartBtn" class="px-8 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] transition-all transform hover:scale-105 active:scale-95">
-                PLAY AGAIN
-            </button>
-        </div>
-    </div>
-
+<body>
+    <canvas id="gameCanvas"></canvas>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const startScreen = document.getElementById('startScreen');
-        const gameOverScreen = document.getElementById('gameOverScreen');
-        const startBtn = document.getElementById('startBtn');
-        const restartBtn = document.getElementById('restartBtn');
-        const finalScoreEl = document.getElementById('finalScore');
-        const bestScoreEl = document.getElementById('bestScore');
+        function setCanvasSize() {
+            canvas.width = Math.min(480, window.innerWidth);
+            canvas.height = window.innerHeight;
+        }
+        setCanvasSize();
+        window.addEventListener('resize', setCanvasSize);
 
+        const birdImg = new Image();
+        birdImg.src = 'bird.png';
+        const pipeImg = new Image();
+        pipeImg.src = 'pipe.png';
+
+        let gravity = 0.5;
+        let flap = -8;
         let gameStarted = false;
-        let gameOver = false;
         let score = 0;
-        let bestScore = localStorage.getItem('neonFlapBest') || 0;
+        let frameCount = 0;
 
-        // Bird Object
-        const bird = {
-            x: 80,
-            y: 320,
-            radius: 14,
-            gravity: 0.45,
-            lift: -8,
+        let bird = {
+            x: canvas.width / 4,
+            y: canvas.height / 2,
+            width: 34,
+            height: 24,
             velocity: 0,
-            update() {
-                this.velocity += this.gravity;
-                this.y += this.velocity;
-
-                // Floor collision
-                if (this.y + this.radius >= canvas.height) {
-                    this.y = canvas.height - this.radius;
-                    triggerGameOver();
-                }
-                // Ceiling collision
-                if (this.y - this.radius <= 0) {
-                    this.y = this.radius;
-                    this.velocity = 0;
-                }
-            },
+           
             draw() {
-                ctx.save();
-                ctx.shadowColor = '#00f3ff';
-                ctx.shadowBlur = 25;
-               
-                // Outer Glow Body
-                ctx.fillStyle = '#00f3ff';
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Core Highlight
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(this.x + 3, this.y - 3, 4, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.restore();
+                ctx.drawImage(birdImg, this.x, this.y, this.width, this.height);
             },
-            flap() {
-                this.velocity = this.lift;
+            update() {
+                this.velocity += gravity;
+                this.y += this.velocity;
+                if (this.y + this.height >= canvas.height) {
+                    gameOver();
+                }
             }
         };
 
-        // Pillars Array
-        let pillars = [];
-        const pillarWidth = 52;
-        const pillarGap = 160;
-        let frameCount = 0;
+        let pipes = [];
+        let pipeWidth = 70;
+        let pipeGap = 160;
+        let pipeSpeed = 3;
 
-        function spawnPillar() {
-            const minHeight = 60;
-            const maxHeight = canvas.height - pillarGap - 100;
-            const height = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
-
-            pillars.push({
+        function addPipe() {
+            let topPipeHeight = Math.random() * (canvas.height - pipeGap - 100) + 50;
+            pipes.push({
                 x: canvas.width,
-                top: height,
-                bottom: canvas.height - height - pillarGap,
-                passed: false
+                top: topPipeHeight,
+                scored: false
             });
-        }
-
-        function updatePillars() {
-            if (frameCount % 100 === 0) {
-                spawnPillar();
-            }
-
-            for (let i = pillars.length - 1; i >= 0; i--) {
-                pillars[i].x -= 2.5;
-
-                // Collision Detection
-                if (
-                    bird.x + bird.radius > pillars[i].x &&
-                    bird.x - bird.radius < pillars[i].x + pillarWidth &&
-                    (bird.y - bird.radius < pillars[i].top || bird.y + bird.radius > canvas.height - pillars[i].bottom)
-                ) {
-                    triggerGameOver();
-                }
-
-                // Score Counting
-                if (!pillars[i].passed && pillars[i].x + pillarWidth < bird.x) {
-                    score++;
-                    pillars[i].passed = true;
-                }
-
-                // Remove off-screen pillars
-                if (pillars[i].x + pillarWidth < 0) {
-                    pillars.splice(i, 1);
-                }
-            }
         }
 
         function drawPillars() {
-            pillars.forEach(p => {
+            for (let i = 0; i < pipes.length; i++) {
+                let p = pipes[i];
+
                 ctx.save();
-                ctx.shadowColor = '#00f3ff';
-                ctx.shadowBlur = 15;
-                ctx.fillStyle = '#0a0a0a';
-                ctx.strokeStyle = '#00f3ff';
-                ctx.lineWidth = 3;
-
-                // Top Pillar
-                ctx.fillRect(p.x, 0, pillarWidth, p.top);
-                ctx.strokeRect(p.x, 0, pillarWidth, p.top);
-
-                // Bottom Pillar
-                ctx.fillRect(p.x, canvas.height - p.bottom, pillarWidth, p.bottom);
-                ctx.strokeRect(p.x, canvas.height - p.bottom, pillarWidth, p.bottom);
-
+                ctx.translate(p.x, p.top);
+                ctx.scale(1, -1);
+                ctx.drawImage(pipeImg, 0, 0, pipeWidth, p.top);
                 ctx.restore();
-            });
+
+                let bottomY = p.top + pipeGap;
+                let bottomHeight = canvas.height - bottomY;
+                ctx.drawImage(pipeImg, p.x, bottomY, pipeWidth, bottomHeight);
+
+                if (gameStarted) {
+                    p.x -= pipeSpeed;
+                   
+                    if (p.x < bird.x && !p.scored) {
+                        score++;
+                        p.scored = true;
+                    }
+
+                    if (
+                        bird.x < p.x + pipeWidth &&
+                        bird.x + bird.width > p.x &&
+                        (bird.y < p.top || bird.y + bird.height > bottomY)
+                    ) {
+                        gameOver();
+                    }
+                }
+            }
+
+            if (pipes.length > 0 && pipes[0].x < -pipeWidth) {
+                pipes.shift();
+            }
         }
 
         function drawScore() {
-            if (!gameStarted) return;
-            ctx.save();
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 36px sans-serif';
+            ctx.font = '60px FlappyFont, Courier New, monospace';
             ctx.textAlign = 'center';
-            ctx.shadowColor = '#00f3ff';
-            ctx.shadowBlur = 10;
-            ctx.fillText(score, canvas.width / 2, 60);
-            ctx.restore();
+            ctx.textBaseline = 'top';
+            ctx.fillText(score, canvas.width / 2, 50);
         }
 
-        function resetGame() {
-            bird.y = 320;
-            bird.velocity = 0;
-            pillars = [];
-            score = 0;
-            frameCount = 0;
-            gameOver = false;
+        function jump() {
+            if (!gameStarted) {
+                gameStarted = true;
+            }
+            bird.velocity = flap;
         }
 
-        function startGame() {
-            resetGame();
-            gameStarted = true;
-            startScreen.classList.add('hidden');
-            gameOverScreen.classList.add('hidden');
-        }
-
-        function triggerGameOver() {
-            gameOver = true;
+        function gameOver() {
             gameStarted = false;
-            if (score > bestScore) {
-                bestScore = score;
-                localStorage.setItem('neonFlapBest', bestScore);
-            }
-            finalScoreEl.innerText = score;
-            bestScoreEl.innerText = bestScore;
-            gameOverScreen.classList.remove('hidden');
+            bird.y = canvas.height / 2;
+            bird.velocity = 0;
+            pipes = [];
+            score = 0;
         }
 
-        // Input Control Handler
-        function handleInput(e) {
-            if (e) e.preventDefault();
-            if (!gameStarted && !gameOver) {
-                startGame();
-            } else if (gameStarted && !gameOver) {
-                bird.flap();
-            }
-        }
-
-        window.addEventListener('keydown', e => {
-            if (e.code === 'Space' || e.code === 'ArrowUp') {
-                handleInput(e);
-            }
-        });
-
-        canvas.addEventListener('pointerdown', handleInput);
-
-        startBtn.addEventListener('click', startGame);
-        restartBtn.addEventListener('click', startGame);
-
-        // Main Game Loop
         function loop() {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (gameStarted) {
                 frameCount++;
                 bird.update();
-                updatePillars();
+               
+                if (frameCount % 90 === 0) {
+                    addPipe();
+                }
             }
 
             drawPillars();
@@ -268,8 +165,13 @@
             requestAnimationFrame(loop);
         }
 
+        window.addEventListener('click', jump);
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            jump();
+        });
+
         loop();
     </script>
 </body>
 </html>
-
